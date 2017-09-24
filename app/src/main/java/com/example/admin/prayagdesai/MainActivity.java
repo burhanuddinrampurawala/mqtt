@@ -19,7 +19,9 @@ import android.widget.Toast;
 
 import org.eclipse.paho.android.service.MqttAndroidClient;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttToken;
+import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
@@ -38,6 +40,7 @@ public class MainActivity extends AppCompatActivity {
     AlertDialog dialog = null;
     private final static String clientId = MqttClient.generateClientId();
 
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -54,6 +57,7 @@ public class MainActivity extends AppCompatActivity {
         Log.w(TAG,path);
         client = new MqttAndroidClient(MainActivity.this, path,
                 clientId);
+        send();
     }
     public void send(){
         try {
@@ -63,6 +67,7 @@ public class MainActivity extends AppCompatActivity {
                 public void onSuccess(IMqttToken asyncActionToken) {
                     // We are connected
                     Log.d(TAG, "onSuccess");
+                    t1.speak("Connected",TextToSpeech.QUEUE_ADD,null,"volume");
                     String topic = "client";
                     String payload = "hello from app";
                     byte[] encodedPayload = new byte[0];
@@ -71,10 +76,10 @@ public class MainActivity extends AppCompatActivity {
                         MqttMessage message = new MqttMessage(encodedPayload);
                         client.publish(topic, message);
                         Log.i(TAG,"Message sent from " + topic);
+                        subscribe();
                     } catch (UnsupportedEncodingException | MqttException e) {
                         Log.e(TAG,e.getMessage());
                     }
-                    t1.speak(" ",TextToSpeech.QUEUE_FLUSH, null,"volume");
                 }
 
                 @Override
@@ -82,6 +87,7 @@ public class MainActivity extends AppCompatActivity {
                     // Something went wrong e.g. connection timeout or firewall problems
                     Log.e(TAG, "onFailure");
                     Log.e(TAG, exception.getMessage());
+                    t1.speak("Connection timed out",TextToSpeech.QUEUE_ADD,null,"volume");
 
 
                 }
@@ -89,58 +95,59 @@ public class MainActivity extends AppCompatActivity {
         } catch (MqttException e) {
             Log.e(TAG,e.getMessage());
         }
+        client.setCallback(new MqttCallback() {
+            @Override
+            public void connectionLost(Throwable cause) {
+
+            }
+
+            @Override
+            public void messageArrived(String topic, MqttMessage message) throws Exception {
+                byte  [] bytes = message.getPayload();
+                String str = null;
+                try {
+                    str = new String(bytes, "UTF-8");
+                } catch (UnsupportedEncodingException e) {
+                    e.printStackTrace();
+                }
+                Log.i(TAG,str);
+                t1.speak(str,TextToSpeech.QUEUE_ADD,null,"volume");
+                Toast.makeText(getApplicationContext(),str,Toast.LENGTH_LONG).show();
+            }
+
+            @Override
+            public void deliveryComplete(IMqttDeliveryToken token) {
+
+            }
+        });
     }
-    public void subscribe(){
-        Log.i(TAG,"ip: " + ip + "\nport: " + port + "\ntopic: " + topic);
-        int qos = 1;
+    public void subscribe()  {
+        Log.i(TAG,"ip: " + ip + "\nport: " + port + "\ntopic: " + topic + "\nclient: " + client);
+        int qos = 0;
         if(topic != null){
             try {
-                IMqttToken subToken = client.subscribe(topic, qos);
-                subToken.setActionCallback(new IMqttActionListener() {
+                client.subscribe(topic, qos, getApplicationContext(), new IMqttActionListener() {
                     @Override
                     public void onSuccess(IMqttToken asyncActionToken) {
+                        Log.i(TAG,"subscribed to topic : " + topic);
                         Toast.makeText(getApplicationContext(),"subscribed to topic : " + topic,Toast.LENGTH_LONG).show();
-                    }
-
-                    @Override
-                    public void onFailure(IMqttToken asyncActionToken,
-                                          Throwable exception) {
-                        // The subscription could not be performed, maybe the user was not
-                        // authorized to subscribe on the specified topic e.g. using wildcards
-                        Log.e(TAG,exception.getMessage());
-
-                    }
-                });
-                subToken.setActionCallback(new IMqttActionListener() {
-                    @Override
-                    public void onSuccess(IMqttToken asyncActionToken) {
-                        byte  [] bytes = new byte[0];
-                        try {
-                            bytes = asyncActionToken.getResponse().getPayload();
-                        } catch (MqttException e) {
-                            e.printStackTrace();
-                        }
-                        String str = null;
-                        try {
-                            str = new String(bytes, "UTF-8");
-                        } catch (UnsupportedEncodingException e) {
-                            e.printStackTrace();
-                        }
-                        t1.speak(str,TextToSpeech.QUEUE_ADD,null,"volume");
-                        Toast.makeText(getApplicationContext(),str,Toast.LENGTH_LONG).show();
+                        t1.speak("subscribed to topic " + topic,TextToSpeech.QUEUE_ADD,null,"volume");
                     }
 
                     @Override
                     public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                        // The subscription could not be performed, maybe the user was not
+                        // authorized to subscribe on the specified topic e.g. using wildcards
                         Log.e(TAG,exception.getMessage());
                     }
                 });
+
             } catch (MqttException e) {
                 Log.e(TAG,e.getMessage());
             }
-            catch (NullPointerException e){
-                Log.e(TAG,e.getMessage());
-            }
+//            catch (NullPointerException e){
+//                Log.e(TAG,e.getMessage());
+//            }
         }
 
     }
@@ -152,7 +159,8 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onSuccess(IMqttToken asyncActionToken) {
                         // The subscription could successfully be removed from the client
-                        Toast.makeText(getApplicationContext(),"unsubscribed to topic : " + topic,Toast.LENGTH_LONG).show();
+                        Log.w(TAG,"unsubscribed to topic : " + topic);
+                        disconnect();
                     }
 
                     @Override
@@ -162,6 +170,7 @@ public class MainActivity extends AppCompatActivity {
                         // did not had a subscription to the topic the unsubscribe action
                         // will be successfully
                         Log.e(TAG,exception.getMessage());
+                        disconnect();
                     }
                 });
 
@@ -183,24 +192,45 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
-        t1.setSpeechRate(0.8f);
-        t1.setPitch(1.2f);
 
     }
 
-//    @Override
-//    protected void onResume() {
-//        speechInitialisation();
-//        send();
-//        subscribe();
-//        super.onResume();
-//    }
-//
-//    @Override
-//    protected void onPause() {
-//        unSubscribe();
-//        super.onPause();
-//    }
+    private void disconnect() {
+
+        try {
+            client.disconnect().setActionCallback(new IMqttActionListener() {
+                @Override
+                public void onSuccess(IMqttToken asyncActionToken) {
+
+                    Log.w(TAG,"disconnected");
+                }
+
+                @Override
+                public void onFailure(IMqttToken asyncActionToken,
+                                      Throwable exception) {
+                    // some error occurred, this is very unlikely as even if the client
+                    // did not had a subscription to the topic the unsubscribe action
+                    // will be successfully
+                    Log.e(TAG,exception.getMessage());
+                }
+            });
+        } catch (MqttException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    protected void onRestart() {
+        connection();
+        super.onRestart();
+    }
+
+    @Override
+    protected void onStop() {
+        unSubscribe();
+        super.onStop();
+    }
+
     private void dataDialog(){
         LayoutInflater inflater = (LayoutInflater) getSystemService(LAYOUT_INFLATER_SERVICE);
         View layout = inflater.inflate(R.layout.adddata,
@@ -234,23 +264,20 @@ public class MainActivity extends AppCompatActivity {
                     editor.putString("port",port);
                     editor.putString("topic",topic);
                     editor.commit();
+                    connection();
                 }
-                connection();
-                send();
-                subscribe();
-                t1.speak("saved",TextToSpeech.QUEUE_ADD,null,"volume");
                 dialog.dismiss();
             }
         });
         builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialogInterface, int i) {
-                t1.speak("canceled",TextToSpeech.QUEUE_ADD,null,"volume");
                 dialog.cancel();
             }
         });
         dialog = builder.create();
         dialog.show();
+
     }
 
     @Override
