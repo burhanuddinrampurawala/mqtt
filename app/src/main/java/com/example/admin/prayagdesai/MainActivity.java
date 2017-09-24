@@ -36,6 +36,7 @@ public class MainActivity extends AppCompatActivity {
     private String topic;
     private SharedPreferences prayag;
     AlertDialog dialog = null;
+    private final static String clientId = MqttClient.generateClientId();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,10 +49,13 @@ public class MainActivity extends AppCompatActivity {
         topic = prayag.getString("topic",null);
         dataDialog();
     }
-    public void send(){
-        String clientId = MqttClient.generateClientId();
-        client = new MqttAndroidClient(this.getApplicationContext(), "tcp://" + ip + ":" + port,
+    public void connection(){
+        String path = "tcp://" + ip + ":" + port;
+        Log.w(TAG,path);
+        client = new MqttAndroidClient(MainActivity.this, path,
                 clientId);
+    }
+    public void send(){
         try {
             IMqttToken token = client.connect();
             token.setActionCallback(new IMqttActionListener() {
@@ -87,6 +91,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
     public void subscribe(){
+        Log.i(TAG,"ip: " + ip + "\nport: " + port + "\ntopic: " + topic);
         int qos = 1;
         if(topic != null){
             try {
@@ -183,19 +188,19 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    @Override
-    protected void onResume() {
-        speechInitialisation();
-        send();
-        subscribe();
-        super.onResume();
-    }
-
-    @Override
-    protected void onPause() {
-        unSubscribe();
-        super.onPause();
-    }
+//    @Override
+//    protected void onResume() {
+//        speechInitialisation();
+//        send();
+//        subscribe();
+//        super.onResume();
+//    }
+//
+//    @Override
+//    protected void onPause() {
+//        unSubscribe();
+//        super.onPause();
+//    }
     private void dataDialog(){
         LayoutInflater inflater = (LayoutInflater) getSystemService(LAYOUT_INFLATER_SERVICE);
         View layout = inflater.inflate(R.layout.adddata,
@@ -219,15 +224,18 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(DialogInterface dialogInterface, int i) {
 
-                SharedPreferences.Editor editor = prayag.edit();
-                ip = ipText.getText().toString();
-                port  = portText.getText().toString();
-                topic = topicText.getText().toString();
-                //saving into database
-                editor.putString("ip",ip);
-                editor.putString("port",port);
-                editor.putString("topic",topic);
-                editor.commit();
+                if(ipText.length() != 0 && portText.length() != 0 && topicText.length() != 0){
+                    SharedPreferences.Editor editor = prayag.edit();
+                    ip = ipText.getText().toString();
+                    port  = portText.getText().toString();
+                    topic = topicText.getText().toString();
+                    //saving into database
+                    editor.putString("ip",ip);
+                    editor.putString("port",port);
+                    editor.putString("topic",topic);
+                    editor.commit();
+                }
+                connection();
                 send();
                 subscribe();
                 t1.speak("saved",TextToSpeech.QUEUE_ADD,null,"volume");
