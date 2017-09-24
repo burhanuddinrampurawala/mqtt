@@ -220,10 +220,13 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(DialogInterface dialogInterface, int i) {
 
                 SharedPreferences.Editor editor = prayag.edit();
+                ip = ipText.getText().toString();
+                port  = portText.getText().toString();
+                topic = topicText.getText().toString();
                 //saving into database
-                editor.putString("ip",ipText.getText().toString());
-                editor.putString("port",portText.getText().toString());
-                editor.putString("topic",topicText.getText().toString());
+                editor.putString("ip",ip);
+                editor.putString("port",port);
+                editor.putString("topic",topic);
                 editor.commit();
                 send();
                 subscribe();
